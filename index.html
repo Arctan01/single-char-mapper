@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单字符映射工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .preset-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .preset-btn:hover,
+        .preset-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .file-upload input[type="file"] {
+            flex: 1;
+            padding: 10px;
+            border: 2px dashed #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .mapping-preview {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            border: 1px solid #ddd;
+        }
+
+        .mapping-item {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            margin: 3px;
+        }
+
+        .mapping-arrow {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .mapping-arrow.reversed {
+            color: #e74c3c;
+        }
+
+        .io-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .io-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .io-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .io-box label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-convert {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-convert:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn-copy {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-copy:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .btn-clear {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .stats {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .custom-mapping-input {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .custom-mapping-input textarea {
+            height: 100px;
+            font-size: 12px;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        /* 反向转换开关样式 */
+        .reverse-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .reverse-toggle:hover {
+            border-color: #667eea;
+        }
+
+        .reverse-toggle.active {
+            border-color: #e74c3c;
+            background: #fef5f5;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            background: #ddd;
+            border-radius: 13px;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .reverse-toggle.active .toggle-switch {
+            background: #e74c3c;
+        }
+
+        .reverse-toggle.active .toggle-switch::after {
+            transform: translateX(24px);
+        }
+
+        .toggle-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .reverse-toggle.active .toggle-label {
+            color: #e74c3c;
+        }
+
+        .mode-indicator {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .mode-normal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .mode-reverse {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .io-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔤 字符映射工具</h1>
+        <p class="subtitle">将文本中的字符按照映射表转换为其他字符</p>
+
+        <!-- 映射表配置区域 -->
+        <div class="section">
+            <div class="section-title">📋 映射表配置</div>
+            
+            <!-- 反向转换开关 -->
+            <div class="reverse-toggle" id="reverseToggle">
+                <div class="toggle-switch"></div>
+                <span class="toggle-label">反向转换</span>
+                <span class="mode-indicator mode-normal" id="modeIndicator">正向模式</span>
+            </div>
+            
+            <div class="preset-buttons">
+                <button class="preset-btn active" data-preset="greek">希腊字母</button>
+                <button class="preset-btn" data-preset="math">数学符号</button>
+                <button class="preset-btn" data-preset="cyrillic">西里尔字母</button>
+                <button class="preset-btn" data-preset="custom">自定义</button>
+            </div>
+
+            <div class="file-upload">
+                <span>上传映射表 (JSON):</span>
+                <input type="file" id="mappingFile" accept=".json">
+            </div>
+
+            <div class="custom-mapping-input" id="customMappingArea" style="display: none;">
+                <label>手动输入映射 (格式: 原字符:新字符，每行一个):</label>
+                <textarea id="customMappingText" placeholder="a:α&#10;b:β&#10;c:γ"></textarea>
+                <p class="help-text">示例：a:α 表示将字符 'a' 映射为 'α'</p>
+            </div>
+
+            <div class="mapping-preview" id="mappingPreview">
+                <!-- 映射预览将在这里显示 -->
+            </div>
+        </div>
+
+        <!-- 输入输出区域 -->
+        <div class="io-container">
+            <div class="io-box">
+                <label class="io-label">
+                    <span id="inputLabel">📥 输入文本</span>
+                </label>
+                <textarea id="inputText" placeholder="在此输入要转换的文本..."></textarea>
+            </div>
+            <div class="io-box">
+                <label class="io-label">
+                    <span id="outputLabel">📤 输出文本</span>
+                </label>
+                <textarea id="outputText" readonly placeholder="转换结果将显示在这里..."></textarea>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="button-group">
+            <button class="btn-convert" id="convertBtn">🔄 转换</button>
+            <button class="btn-copy" id="copyBtn">📋 复制结果</button>
+            <button class="btn-clear" id="clearBtn">🗑️ 清空</button>
+        </div>
+
+        <div class="stats" id="stats">
+            映射表包含 0 个映射规则
+        </div>
+    </div>
+
+    <div class="toast" id="toast">已复制到剪贴板</div>
+
+    <script>
+        // ==================== 预设映射表 ====================
+        const PRESET_MAPPINGS = {
+            // 希腊字母映射
+            greek: {
+                'a': 'α', 'b': 'β', 'c': 'χ', 'd': 'δ', 'e': 'ε',
+                'f': 'φ', 'g': 'γ', 'h': 'η', 'i': 'ι', 'k': 'κ',
+                'l': 'λ', 'm': 'μ', 'n': 'ν', 'o': 'ο', 'p': 'π',
+                'q': 'θ', 'r': 'ρ', 's': 'σ', 't': 'τ', 'u': 'υ',
+                'w': 'ω', 'x': 'ξ', 'y': 'ψ', 'z': 'ζ',
+                'A': 'Α', 'B': 'Β', 'C': 'Χ', 'D': 'Δ', 'E': 'Ε',
+                'F': 'Φ', 'G': 'Γ', 'H': 'Η', 'I': 'Ι', 'K': 'Κ',
+                'L': 'Λ', 'M': 'Μ', 'N': 'Ν', 'O': 'Ο', 'P': 'Π',
+                'Q': 'Θ', 'R': 'Ρ', 'S': 'Σ', 'T': 'Τ', 'U': 'Υ',
+                'W': 'Ω', 'X': 'Ξ', 'Y': 'Ψ', 'Z': 'Ζ'
+            },
+            
+            // 数学符号映射
+            math: {
+                '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
+                '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗',
+                'a': '𝑎', 'b': '𝑏', 'c': '𝑐', 'd': '𝑑', 'e': '𝑒',
+                'f': '𝑓', 'g': '𝑔', 'h': 'ℎ', 'i': '𝑖', 'j': '𝑗',
+                'k': '𝑘', 'l': '𝑙', 'm': '𝑚', 'n': '𝑛', 'o': '𝑜',
+                'p': '𝑝', 'q': '𝑞', 'r': '𝑟', 's': '𝑠', 't': '𝑡',
+                'u': '𝑢', 'v': '𝑣', 'w': '𝑤', 'x': '𝑥', 'y': '𝑦',
+                'z': '𝑧',
+                'A': '𝐴', 'B': '𝐵', 'C': '𝐶', 'D': '𝐷', 'E': '𝐸',
+                'F': '𝐹', 'G': '𝐺', 'H': '𝐻', 'I': '𝐼', 'J': '𝐽',
+                'K': '𝐾', 'L': '𝐿', 'M': '𝑀', 'N': '𝑁', 'O': '𝑂',
+                'P': '𝑃', 'Q': '𝑄', 'R': '𝑅', 'S': '𝑆', 'T': '𝑇',
+                'U': '𝑈', 'V': '𝑉', 'W': '𝑊', 'X': '𝑋', 'Y': '𝑌',
+                'Z': '𝑍',
+                '+': '＋', '-': '－', '=': '＝', '*': '＊', '/': '／'
+            },
+            
+            // 西里尔字母映射（伪西里尔）
+            cyrillic: {
+                'a': 'а', 'b': 'б', 'c': 'с', 'e': 'е', 'o': 'о',
+                'p': 'р', 's': 'с', 'x': 'х', 'y': 'у',
+                'A': 'А', 'B': 'В', 'C': 'С', 'E': 'Е', 'H': 'Н',
+                'K': 'К', 'M': 'М', 'O': 'О', 'P': 'Р', 'T': 'Т',
+                'X': 'Х', 'Y': 'У'
+            },
+            
+            // 自定义（初始为空）
+            custom: {}
+        };
+
+        // ==================== 状态变量 ====================
+        let currentMapping = { ...PRESET_MAPPINGS.greek };  // 原始映射表
+        let reversedMapping = {};  // 反向映射表
+        let currentPreset = 'greek';
+        let isReverseMode = false;  // 反向模式开关
+
+        // ==================== DOM 元素 ====================
+        const inputText = document.getElementById('inputText');
+        const outputText = document.getElementById('outputText');
+        const convertBtn = document.getElementById('convertBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const mappingFile = document.getElementById('mappingFile');
+        const mappingPreview = document.getElementById('mappingPreview');
+        const stats = document.getElementById('stats');
+        const toast = document.getElementById('toast');
+        const customMappingArea = document.getElementById('customMappingArea');
+        const customMappingText = document.getElementById('customMappingText');
+        const presetBtns = document.querySelectorAll('.preset-btn');
+        const reverseToggle = document.getElementById('reverseToggle');
+        const modeIndicator = document.getElementById('modeIndicator');
+        const inputLabel = document.getElementById('inputLabel');
+        const outputLabel = document.getElementById('outputLabel');
+
+        // ==================== 核心功能 ====================
+        
+        // 生成反向映射表
+        function createReversedMapping(mapping) {
+            const reversed = {};
+            for (const [key, value] of Object.entries(mapping)) {
+                reversed[value] = key;
+            }
+            return reversed;
+        }
+
+        // 更新映射预览
+        function updateMappingPreview() {
+            const mapping = isReverseMode ? reversedMapping : currentMapping;
+            const entries = Object.entries(mapping);
+            
+            if (entries.length === 0) {
+                mappingPreview.innerHTML = '<span style="color: #999;">暂无映射规则</span>';
+            } else {
+                const arrowClass = isReverseMode ? 'reversed' : '';
+                mappingPreview.innerHTML = entries.slice(0, 50).map(([k, v]) => 
+                    `<span class="mapping-item">${escapeHtml(k)} <span class="mapping-arrow ${arrowClass}">→</span> ${escapeHtml(v)}</span>`
+                ).join('');
+                if (entries.length > 50) {
+                    mappingPreview.innerHTML += `<span style="color: #999;">... 还有 ${entries.length - 50} 个</span>`;
+                }
+            }
+            
+            const modeText = isReverseMode ? '反向' : '正向';
+            stats.textContent = `映射表包含 ${entries.length} 个映射规则（${modeText}模式）`;
+        }
+
+        // 更新模式指示器
+        function updateModeIndicator() {
+            if (isReverseMode) {
+                modeIndicator.textContent = '反向模式';
+                modeIndicator.className = 'mode-indicator mode-reverse';
+                reverseToggle.classList.add('active');
+                inputLabel.textContent = '📥 输入文本（已映射）';
+                outputLabel.textContent = '📤 输出文本（还原）';
+            } else {
+                modeIndicator.textContent = '正向模式';
+                modeIndicator.className = 'mode-indicator mode-normal';
+                reverseToggle.classList.remove('active');
+                inputLabel.textContent = '📥 输入文本';
+                outputLabel.textContent = '📤 输出文本';
+            }
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 执行字符映射
+        function convertText(text, mapping) {
+            let result = '';
+            for (const char of text) {
+                result += mapping[char] || char; // 不在映射表中则保留原字符
+            }
+            return result;
+        }
+
+        // 转换操作
+        function doConvert() {
+            const input = inputText.value;
+            const mapping = isReverseMode ? reversedMapping : currentMapping;
+            const output = convertText(input, mapping);
+            outputText.value = output;
+        }
+
+        // 加载预设映射表
+        function loadPreset(presetName) {
+            currentPreset = presetName;
+            currentMapping = { ...PRESET_MAPPINGS[presetName] };
+            reversedMapping = createReversedMapping(currentMapping);
+            updateMappingPreview();
+            updateModeIndicator();
+            
+            presetBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.preset === presetName);
+            });
+            
+            customMappingArea.style.display = presetName === 'custom' ? 'block' : 'none';
+        }
+
+        // 解析自定义映射文本
+        function parseCustomMapping(text) {
+            const mapping = {};
+            const lines = text.split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.includes(':')) continue;
+                
+                const colonIndex = trimmed.indexOf(':');
+                const key = trimmed.slice(0, colonIndex);
+                const value = trimmed.slice(colonIndex + 1);
+                
+                if (key.length > 0) {
+                    mapping[key] = value;
+                }
+            }
+            return mapping;
+        }
+
+        // ==================== 事件监听 ====================
+        
+        // 反向转换开关
+        reverseToggle.addEventListener('click', () => {
+            isReverseMode = !isReverseMode;
+            updateModeIndicator();
+            updateMappingPreview();
+            doConvert(); // 重新转换当前文本
+            showToast(isReverseMode ? '已切换到反向模式' : '已切换到正向模式');
+        });
+
+        // 预设按钮点击
+        presetBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                loadPreset(btn.dataset.preset);
+            });
+        });
+
+        // 文件上传
+        mappingFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const mapping = JSON.parse(event.target.result);
+                    if (typeof mapping === 'object' && mapping !== null) {
+                        currentMapping = mapping;
+                        reversedMapping = createReversedMapping(currentMapping);
+                        currentPreset = 'uploaded';
+                        presetBtns.forEach(btn => btn.classList.remove('active'));
+                        updateMappingPreview();
+                        updateModeIndicator();
+                        showToast('映射表加载成功！');
+                    } else {
+                        throw new Error('无效的格式');
+                    }
+                } catch (error) {
+                    showToast('JSON 格式错误，请检查文件');
+                    console.error(error);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // 自定义映射文本输入
+        customMappingText.addEventListener('input', () => {
+            currentMapping = parseCustomMapping(customMappingText.value);
+            reversedMapping = createReversedMapping(currentMapping);
+            updateMappingPreview();
+            updateModeIndicator();
+        });
+
+        // 转换按钮
+        convertBtn.addEventListener('click', doConvert);
+
+        // 复制按钮
+        copyBtn.addEventListener('click', async () => {
+            if (!outputText.value) {
+                showToast('没有可复制的内容');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(outputText.value);
+                showToast('已复制到剪贴板！');
+            } catch (error) {
+                // 降级方案
+                outputText.select();
+                document.execCommand('copy');
+                showToast('已复制到剪贴板！');
+            }
+        });
+
+        // 清空按钮
+        clearBtn.addEventListener('click', () => {
+            inputText.value = '';
+            outputText.value = '';
+            inputText.focus();
+        });
+
+        // 输入时实时转换（可选）
+        inputText.addEventListener('input', doConvert);
+
+        // 显示提示
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // ==================== 初始化 ====================
+        reversedMapping = createReversedMapping(currentMapping);
+        updateMappingPreview();
+        updateModeIndicator();
+        inputText.focus();
+    </script>
+</body>
+</html>
