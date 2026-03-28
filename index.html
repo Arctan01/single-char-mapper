@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>单字符映射工具</title>
+    <title>字符映射工具</title>
     <style>
         * {
             margin: 0;
@@ -410,6 +410,113 @@
     <div class="toast" id="toast">已复制到剪贴板</div>
 
     <script>
+        const REPO_CONFIG = {
+            // 假设你的 JSON 文件放在仓库的 /mappings/ 目录下
+            baseUrl: './mappings/', 
+            // 文件列表清单，必须放在 baseUrl 目录下
+            indexFile: 'index.json' 
+        };
+
+        /**
+         * 2. 异步加载仓库预设的函数
+         * 这个函数会获取文件列表，下载每个 JSON，并注入到 PRESET_MAPPINGS 中
+         */
+        async function loadRepoPresets() {
+            try {
+                const { baseUrl, indexFile } = REPO_CONFIG;
+                
+                // --- 第一步：获取文件列表 ---
+                // 拼接 URL 并添加时间戳防止缓存
+                const listUrl = `${baseUrl}${indexFile}?t=${Date.now()}`;
+                const listResponse = await fetch(listUrl);
+                
+                if (!listResponse.ok) throw new Error(`文件列表获取失败: ${listResponse.status}`);
+                
+                const fileList = await listResponse.json(); // 例如: ["map1.json", "map2.json"]
+
+                // --- 第二步：遍历列表加载每个文件 ---
+                for (const fileName of fileList) {
+                    const presetName = `repo-${fileName.replace('.json', '')}`; // 为了避免命名冲突，加个 repo- 前缀
+                    const fileUrl = `${baseUrl}${fileName}`;
+                    
+                    try {
+                        const fileResponse = await fetch(fileUrl);
+                        if (!fileResponse.ok) continue;
+
+                        const mappingData = await fileResponse.json();
+                        
+                        // 将加载的数据注入到全局预设对象中
+                        PRESET_MAPPINGS[presetName] = mappingData;
+                        
+                    } catch (err) {
+                        console.warn(`[仓库加载] 跳过文件 ${fileName}:`, err.message);
+                        // 继续加载下一个，不中断流程
+                    }
+                }
+
+                // --- 第三步：动态刷新按钮 UI ---
+                // 调用原始代码中的 renderPresetButtons 函数（见下方补丁）
+                renderPresetButtons();
+                
+            } catch (error) {
+                console.error('[仓库加载] 严重错误:', error);
+                // 这里不报 Toast，避免干扰用户使用本地预设
+            }
+        }
+
+        /**
+         * 3. 修复/补全：重新渲染按钮的函数
+         * 原始代码中是直接写死的 HTML，我们需要一个函数来根据 PRESET_MAPPINGS 重新生成按钮
+         * 请在 loadRepoPresets 函数下方插入这个函数
+         */
+        function renderPresetButtons() {
+            const container = document.querySelector('.preset-buttons');
+            // 清空容器（保留手动上传等其他元素，或者只清空按钮）
+            // 这里简单处理：只移除 class 包含 preset-btn 的按钮
+            container.querySelectorAll('.preset-btn').forEach(btn => btn.remove());
+
+            // 遍历所有预设（包括原始的和刚从仓库加载的）
+            Object.keys(PRESET_MAPPINGS).forEach(key => {
+                // 过滤掉不需要显示为按钮的键（如可能存在的辅助键）
+                if (['greek', 'math', 'cyrillic', 'custom'].includes(key) || key.startsWith('repo-')) {
+                    const btn = document.createElement('button');
+                    btn.className = 'preset-btn';
+                    btn.dataset.preset = key;
+                    
+                    // 简单的键名映射显示
+                    const displayNameMap = {
+                        'greek': '希腊字母',
+                        'math': '数学符号', 
+                        'cyrillic': '西里尔字母',
+                        'custom': '自定义'
+                    };
+                    btn.textContent = displayNameMap[key] || key.replace('repo-', '📦 ').replace(/-/g, ' ');
+                    
+                    container.appendChild(btn);
+                }
+            });
+
+            // 重新绑定事件（需要确保 bindPresetEvents 函数存在，原始代码逻辑里有类似逻辑）
+            bindPresetEvents();
+        }
+
+        /**
+         * 4. 辅助函数：绑定按钮事件
+         * 原始代码中按钮是写死的，现在我们需要动态绑定
+         * 请在上面的函数下方插入此函数
+         */
+        function bindPresetEvents() {
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // 移除所有 active
+                    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                    // 添加当前 active
+                    this.classList.add('active');
+                    // 执行加载
+                    loadPreset(this.dataset.preset);
+                });
+            });
+        }
         // ==================== 预设映射表 ====================
         const PRESET_MAPPINGS = {
             // 希腊字母映射
@@ -563,7 +670,7 @@
             updateMappingPreview();
             updateModeIndicator();
             
-            presetBtns.forEach(btn => {
+            document.querySelectorAll('.preset-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.preset === presetName);
             });
             
