@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>字符映射工具</title>
+    <title>字符映射工具 - 支持仓库预设加载</title>
     <style>
         * {
             margin: 0;
@@ -78,6 +78,75 @@
         .preset-btn.active {
             background: #667eea;
             color: white;
+        }
+
+        /* 仓库预设区域样式 */
+        .repo-preset-area {
+            background: #fff0e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #ffe0b5;
+        }
+
+        .repo-preset-title {
+            font-weight: 600;
+            color: #c97e00;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .repo-control {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .repo-input-group {
+            flex: 2;
+            min-width: 180px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .repo-input-group input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .repo-input-group input:focus {
+            outline: none;
+            border-color: #ff9800;
+        }
+
+        .repo-load-btn {
+            padding: 8px 20px;
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .repo-load-btn:hover {
+            background: #e68900;
+            transform: translateY(-1px);
+        }
+
+        .repo-suggest {
+            font-size: 12px;
+            color: #b87c2e;
+            margin-top: 8px;
         }
 
         .file-upload {
@@ -230,6 +299,7 @@
             opacity: 0;
             transition: opacity 0.3s;
             pointer-events: none;
+            z-index: 1000;
         }
 
         .toast.show {
@@ -338,12 +408,18 @@
             align-items: center;
             gap: 8px;
         }
+
+        hr {
+            margin: 12px 0;
+            border: none;
+            border-top: 1px solid #e0e0e0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔤 字符映射工具</h1>
-        <p class="subtitle">将文本中的字符按照映射表转换为其他字符</p>
+        <p class="subtitle">支持正向/反向转换 | 仓库预设加载 | 自定义映射</p>
 
         <!-- 映射表配置区域 -->
         <div class="section">
@@ -356,6 +432,7 @@
                 <span class="mode-indicator mode-normal" id="modeIndicator">正向模式</span>
             </div>
             
+            <!-- 内置预设按钮 -->
             <div class="preset-buttons">
                 <button class="preset-btn active" data-preset="greek">希腊字母</button>
                 <button class="preset-btn" data-preset="math">数学符号</button>
@@ -363,17 +440,43 @@
                 <button class="preset-btn" data-preset="custom">自定义</button>
             </div>
 
+            <!-- 新增: 仓库预设加载区域 (读取 /mappings 下的 JSON 文件) -->
+            <div class="repo-preset-area">
+                <div class="repo-preset-title">
+                    📂 从仓库加载预设 (mappings/)
+                </div>
+                <div class="repo-control">
+                    <div class="repo-input-group">
+                        <input type="text" id="repoFileName" placeholder="输入文件名 (无需 .json)" list="repoFileSuggestions" value="greek">
+                        <datalist id="repoFileSuggestions">
+                            <option>greek</option>
+                            <option>math</option>
+                            <option>cyrillic</option>
+                            <option>symbols</option>
+                            <option>emoji</option>
+                        </datalist>
+                        <button class="repo-load-btn" id="loadRepoPresetBtn">📥 加载</button>
+                    </div>
+                </div>
+                <div class="repo-suggest">
+                    💡 提示: 输入文件名 (例如 greek) 将加载 ./mappings/greek.json，JSON格式需为 { "原字符": "新字符", ... }
+                </div>
+            </div>
+
+            <!-- 文件上传 (传统JSON) -->
             <div class="file-upload">
                 <span>上传映射表 (JSON):</span>
                 <input type="file" id="mappingFile" accept=".json">
             </div>
 
+            <!-- 自定义映射文本区域 (仅当custom预设显示) -->
             <div class="custom-mapping-input" id="customMappingArea" style="display: none;">
                 <label>手动输入映射 (格式: 原字符:新字符，每行一个):</label>
                 <textarea id="customMappingText" placeholder="a:α&#10;b:β&#10;c:γ"></textarea>
                 <p class="help-text">示例：a:α 表示将字符 'a' 映射为 'α'</p>
             </div>
 
+            <!-- 映射预览 -->
             <div class="mapping-preview" id="mappingPreview">
                 <!-- 映射预览将在这里显示 -->
             </div>
@@ -410,116 +513,8 @@
     <div class="toast" id="toast">已复制到剪贴板</div>
 
     <script>
-        const REPO_CONFIG = {
-            // 假设你的 JSON 文件放在仓库的 /mappings/ 目录下
-            baseUrl: './mappings/', 
-            // 文件列表清单，必须放在 baseUrl 目录下
-            indexFile: 'index.json' 
-        };
-
-        /**
-         * 2. 异步加载仓库预设的函数
-         * 这个函数会获取文件列表，下载每个 JSON，并注入到 PRESET_MAPPINGS 中
-         */
-        async function loadRepoPresets() {
-            try {
-                const { baseUrl, indexFile } = REPO_CONFIG;
-                
-                // --- 第一步：获取文件列表 ---
-                // 拼接 URL 并添加时间戳防止缓存
-                const listUrl = `${baseUrl}${indexFile}?t=${Date.now()}`;
-                const listResponse = await fetch(listUrl);
-                
-                if (!listResponse.ok) throw new Error(`文件列表获取失败: ${listResponse.status}`);
-                
-                const fileList = await listResponse.json(); // 例如: ["map1.json", "map2.json"]
-
-                // --- 第二步：遍历列表加载每个文件 ---
-                for (const fileName of fileList) {
-                    const presetName = `repo-${fileName.replace('.json', '')}`; // 为了避免命名冲突，加个 repo- 前缀
-                    const fileUrl = `${baseUrl}${fileName}`;
-                    
-                    try {
-                        const fileResponse = await fetch(fileUrl);
-                        if (!fileResponse.ok) continue;
-
-                        const mappingData = await fileResponse.json();
-                        
-                        // 将加载的数据注入到全局预设对象中
-                        PRESET_MAPPINGS[presetName] = mappingData;
-                        
-                    } catch (err) {
-                        console.warn(`[仓库加载] 跳过文件 ${fileName}:`, err.message);
-                        // 继续加载下一个，不中断流程
-                    }
-                }
-
-                // --- 第三步：动态刷新按钮 UI ---
-                // 调用原始代码中的 renderPresetButtons 函数（见下方补丁）
-                renderPresetButtons();
-                
-            } catch (error) {
-                console.error('[仓库加载] 严重错误:', error);
-                // 这里不报 Toast，避免干扰用户使用本地预设
-            }
-        }
-
-        /**
-         * 3. 修复/补全：重新渲染按钮的函数
-         * 原始代码中是直接写死的 HTML，我们需要一个函数来根据 PRESET_MAPPINGS 重新生成按钮
-         * 请在 loadRepoPresets 函数下方插入这个函数
-         */
-        function renderPresetButtons() {
-            const container = document.querySelector('.preset-buttons');
-            // 清空容器（保留手动上传等其他元素，或者只清空按钮）
-            // 这里简单处理：只移除 class 包含 preset-btn 的按钮
-            container.querySelectorAll('.preset-btn').forEach(btn => btn.remove());
-
-            // 遍历所有预设（包括原始的和刚从仓库加载的）
-            Object.keys(PRESET_MAPPINGS).forEach(key => {
-                // 过滤掉不需要显示为按钮的键（如可能存在的辅助键）
-                if (['greek', 'math', 'cyrillic', 'custom'].includes(key) || key.startsWith('repo-')) {
-                    const btn = document.createElement('button');
-                    btn.className = 'preset-btn';
-                    btn.dataset.preset = key;
-                    
-                    // 简单的键名映射显示
-                    const displayNameMap = {
-                        'greek': '希腊字母',
-                        'math': '数学符号', 
-                        'cyrillic': '西里尔字母',
-                        'custom': '自定义'
-                    };
-                    btn.textContent = displayNameMap[key] || key.replace('repo-', '📦 ').replace(/-/g, ' ');
-                    
-                    container.appendChild(btn);
-                }
-            });
-
-            // 重新绑定事件（需要确保 bindPresetEvents 函数存在，原始代码逻辑里有类似逻辑）
-            bindPresetEvents();
-        }
-
-        /**
-         * 4. 辅助函数：绑定按钮事件
-         * 原始代码中按钮是写死的，现在我们需要动态绑定
-         * 请在上面的函数下方插入此函数
-         */
-        function bindPresetEvents() {
-            document.querySelectorAll('.preset-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    // 移除所有 active
-                    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-                    // 添加当前 active
-                    this.classList.add('active');
-                    // 执行加载
-                    loadPreset(this.dataset.preset);
-                });
-            });
-        }
-        // ==================== 预设映射表 ====================
+        // ==================== 预设映射表 (内置) ====================
         const PRESET_MAPPINGS = {
-            // 希腊字母映射
             greek: {
                 'a': 'α', 'b': 'β', 'c': 'χ', 'd': 'δ', 'e': 'ε',
                 'f': 'φ', 'g': 'γ', 'h': 'η', 'i': 'ι', 'k': 'κ',
@@ -532,8 +527,6 @@
                 'Q': 'Θ', 'R': 'Ρ', 'S': 'Σ', 'T': 'Τ', 'U': 'Υ',
                 'W': 'Ω', 'X': 'Ξ', 'Y': 'Ψ', 'Z': 'Ζ'
             },
-            
-            // 数学符号映射
             math: {
                 '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
                 '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗',
@@ -551,8 +544,6 @@
                 'Z': '𝑍',
                 '+': '＋', '-': '－', '=': '＝', '*': '＊', '/': '／'
             },
-            
-            // 西里尔字母映射（伪西里尔）
             cyrillic: {
                 'a': 'а', 'b': 'б', 'c': 'с', 'e': 'е', 'o': 'о',
                 'p': 'р', 's': 'с', 'x': 'х', 'y': 'у',
@@ -560,16 +551,14 @@
                 'K': 'К', 'M': 'М', 'O': 'О', 'P': 'Р', 'T': 'Т',
                 'X': 'Х', 'Y': 'У'
             },
-            
-            // 自定义（初始为空）
             custom: {}
         };
 
         // ==================== 状态变量 ====================
-        let currentMapping = { ...PRESET_MAPPINGS.greek };  // 原始映射表
-        let reversedMapping = {};  // 反向映射表
+        let currentMapping = { ...PRESET_MAPPINGS.greek };  // 当前生效映射 (正向)
+        let reversedMapping = {};                           // 反向映射表
         let currentPreset = 'greek';
-        let isReverseMode = false;  // 反向模式开关
+        let isReverseMode = false;
 
         // ==================== DOM 元素 ====================
         const inputText = document.getElementById('inputText');
@@ -588,19 +577,57 @@
         const modeIndicator = document.getElementById('modeIndicator');
         const inputLabel = document.getElementById('inputLabel');
         const outputLabel = document.getElementById('outputLabel');
-
-        // ==================== 核心功能 ====================
         
+        // 仓库预设相关元素
+        const repoFileNameInput = document.getElementById('repoFileName');
+        const loadRepoPresetBtn = document.getElementById('loadRepoPresetBtn');
+
+        // ==================== 辅助函数 ====================
         // 生成反向映射表
         function createReversedMapping(mapping) {
             const reversed = {};
             for (const [key, value] of Object.entries(mapping)) {
+                // 注意: 若多个原字符映射到同一个目标，反向时只保留最后一个，但通常映射表是一对一的，可以接受
                 reversed[value] = key;
             }
             return reversed;
         }
 
-        // 更新映射预览
+        // 应用新的映射表 (核心更新函数)
+        function applyMapping(newMapping, sourceType = 'custom', updateCustomTextarea = false) {
+            currentMapping = { ...newMapping };
+            reversedMapping = createReversedMapping(currentMapping);
+            // 更新预览和统计
+            updateMappingPreview();
+            // 如果当前是反向模式，模式指示器样式已由独立函数维护，但预览内容会正确显示反向映射
+            // 重新执行转换以刷新输出
+            doConvert();
+            
+            // 根据来源管理UI状态
+            if (sourceType === 'preset') {
+                // 预设按钮高亮在外部已经处理，但需要隐藏自定义区域
+                customMappingArea.style.display = 'none';
+            } else if (sourceType === 'repo') {
+                // 仓库加载预设: 清除所有预设按钮高亮，隐藏自定义区域
+                presetBtns.forEach(btn => btn.classList.remove('active'));
+                customMappingArea.style.display = 'none';
+                currentPreset = 'repo';
+            } else if (sourceType === 'upload') {
+                presetBtns.forEach(btn => btn.classList.remove('active'));
+                customMappingArea.style.display = 'none';
+                currentPreset = 'uploaded';
+            } else if (sourceType === 'custom-textarea' && updateCustomTextarea) {
+                // 来自自定义文本域手动输入，已由对应事件处理，保持显示区域
+                presetBtns.forEach(btn => btn.classList.remove('active'));
+                document.querySelector('.preset-btn[data-preset="custom"]').classList.add('active');
+                currentPreset = 'custom';
+                customMappingArea.style.display = 'block';
+            }
+            
+            showToast(`已加载映射表，共 ${Object.keys(currentMapping).length} 条规则`);
+        }
+
+        // 更新映射预览UI
         function updateMappingPreview() {
             const mapping = isReverseMode ? reversedMapping : currentMapping;
             const entries = Object.entries(mapping);
@@ -610,7 +637,7 @@
             } else {
                 const arrowClass = isReverseMode ? 'reversed' : '';
                 mappingPreview.innerHTML = entries.slice(0, 50).map(([k, v]) => 
-                    `<span class="mapping-item">${escapeHtml(k)} <span class="mapping-arrow ${arrowClass}">→</span> ${escapeHtml(v)}</span>`
+                    `<span class="mapping-item">${escapeHtml(String(k))} <span class="mapping-arrow ${arrowClass}">→</span> ${escapeHtml(String(v))}</span>`
                 ).join('');
                 if (entries.length > 50) {
                     mappingPreview.innerHTML += `<span style="color: #999;">... 还有 ${entries.length - 50} 个</span>`;
@@ -621,7 +648,7 @@
             stats.textContent = `映射表包含 ${entries.length} 个映射规则（${modeText}模式）`;
         }
 
-        // 更新模式指示器
+        // 更新模式指示器样式及标签
         function updateModeIndicator() {
             if (isReverseMode) {
                 modeIndicator.textContent = '反向模式';
@@ -636,25 +663,24 @@
                 inputLabel.textContent = '📥 输入文本';
                 outputLabel.textContent = '📤 输出文本';
             }
+            // 刷新预览 (因为箭头方向和显示内容依赖isReverseMode)
+            updateMappingPreview();
         }
 
-        // HTML 转义
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // 执行字符映射
         function convertText(text, mapping) {
             let result = '';
             for (const char of text) {
-                result += mapping[char] || char; // 不在映射表中则保留原字符
+                result += mapping[char] || char;
             }
             return result;
         }
 
-        // 转换操作
         function doConvert() {
             const input = inputText.value;
             const mapping = isReverseMode ? reversedMapping : currentMapping;
@@ -662,33 +688,49 @@
             outputText.value = output;
         }
 
-        // 加载预设映射表
-        function loadPreset(presetName) {
-            currentPreset = presetName;
-            currentMapping = { ...PRESET_MAPPINGS[presetName] };
-            reversedMapping = createReversedMapping(currentMapping);
-            updateMappingPreview();
-            updateModeIndicator();
-            
-            document.querySelectorAll('.preset-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.preset === presetName);
-            });
-            
-            customMappingArea.style.display = presetName === 'custom' ? 'block' : 'none';
+        function showToast(message, duration = 2000) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration);
         }
 
-        // 解析自定义映射文本
+        // 加载内置预设
+        function loadPreset(presetName) {
+            currentPreset = presetName;
+            const presetData = PRESET_MAPPINGS[presetName];
+            if (presetData) {
+                applyMapping(presetData, 'preset');
+                // 处理自定义区域显示
+                if (presetName === 'custom') {
+                    customMappingArea.style.display = 'block';
+                    // 尝试将当前映射同步到文本域 (如果自定义映射为空但用户之前可能填过)
+                    if (Object.keys(currentMapping).length === 0 && customMappingText.value.trim() === '') {
+                        customMappingText.value = '';
+                    } else if (Object.keys(currentMapping).length > 0 && presetName === 'custom') {
+                        // 将currentMapping转为文本域格式显示，便于编辑
+                        const lines = Object.entries(currentMapping).map(([k, v]) => `${k}:${v}`).join('\n');
+                        customMappingText.value = lines;
+                    }
+                } else {
+                    customMappingArea.style.display = 'none';
+                }
+                // 高亮对应按钮
+                presetBtns.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.preset === presetName);
+                });
+            }
+        }
+
+        // 解析自定义映射文本 (格式 键:值 每行)
         function parseCustomMapping(text) {
             const mapping = {};
             const lines = text.split('\n');
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed || !trimmed.includes(':')) continue;
-                
                 const colonIndex = trimmed.indexOf(':');
                 const key = trimmed.slice(0, colonIndex);
                 const value = trimmed.slice(colonIndex + 1);
-                
                 if (key.length > 0) {
                     mapping[key] = value;
                 }
@@ -696,21 +738,76 @@
             return mapping;
         }
 
-        // ==================== 事件监听 ====================
-        
-        // 反向转换开关
+        // ==================== 仓库预设加载 (从 /mappings/xxx.json) ====================
+        async function loadRepoPreset(fileBaseName) {
+            if (!fileBaseName || fileBaseName.trim() === '') {
+                showToast('请输入文件名', 1500);
+                return false;
+            }
+            // 清理文件名，防止路径遍历，仅允许字母数字下划线短横线
+            const cleanName = fileBaseName.trim().replace(/[^a-zA-Z0-9_\-]/g, '');
+            if (cleanName !== fileBaseName.trim()) {
+                showToast('文件名包含非法字符，仅允许字母、数字、下划线、短横线', 2000);
+                return false;
+            }
+            const jsonPath = `./mappings/${cleanName}.json`;
+            try {
+                showToast(`正在加载 ${cleanName}.json ...`, 1500);
+                const response = await fetch(jsonPath);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: 文件不存在或无法访问`);
+                }
+                const mappingData = await response.json();
+                if (typeof mappingData !== 'object' || mappingData === null || Array.isArray(mappingData)) {
+                    throw new Error('JSON 格式必须为对象 { "原字符": "目标字符", ... }');
+                }
+                // 验证映射值是否为字符串
+                for (const [key, val] of Object.entries(mappingData)) {
+                    if (typeof key !== 'string' || (typeof val !== 'string' && val !== undefined)) {
+                        throw new Error(`映射项错误: 键 "${key}" 的值不是字符串`);
+                    }
+                }
+                applyMapping(mappingData, 'repo');
+                // 成功加载后，清空自定义区域高亮，同时可选将文件名记录到输入框
+                repoFileNameInput.value = cleanName;
+                showToast(`✅ 成功加载仓库预设: ${cleanName}.json (${Object.keys(mappingData).length} 条规则)`);
+                return true;
+            } catch (err) {
+                console.error(err);
+                showToast(`❌ 加载失败: ${err.message}，请确保文件位于 /mappings/${cleanName}.json 且格式正确`, 3000);
+                return false;
+            }
+        }
+
+        // ==================== 事件绑定 ====================
+        // 反向模式切换
         reverseToggle.addEventListener('click', () => {
             isReverseMode = !isReverseMode;
             updateModeIndicator();
-            updateMappingPreview();
-            doConvert(); // 重新转换当前文本
-            showToast(isReverseMode ? '已切换到反向模式' : '已切换到正向模式');
+            doConvert();  // 实时转换
+            showToast(isReverseMode ? '反向模式: 将映射值还原为原字符' : '正向模式: 按映射表转换');
         });
 
-        // 预设按钮点击
+        // 内置预设按钮
         presetBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                loadPreset(btn.dataset.preset);
+                const preset = btn.dataset.preset;
+                if (preset === 'custom') {
+                    // 显示自定义区域，并尝试加载当前映射文本 (如果已有映射则展示)
+                    loadPreset('custom');
+                    // 若当前映射不是来自custom但点击custom，将现有映射填充到文本框方便编辑
+                    if (currentPreset !== 'custom') {
+                        const lines = Object.entries(currentMapping).map(([k, v]) => `${k}:${v}`).join('\n');
+                        customMappingText.value = lines;
+                        applyMapping(parseCustomMapping(customMappingText.value), 'custom-textarea', true);
+                    } else {
+                        // 已经是custom模式，刷新映射
+                        const newMap = parseCustomMapping(customMappingText.value);
+                        applyMapping(newMap, 'custom-textarea', true);
+                    }
+                } else {
+                    loadPreset(preset);
+                }
             });
         });
 
@@ -718,21 +815,15 @@
         mappingFile.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
             const reader = new FileReader();
             reader.onload = (event) => {
                 try {
                     const mapping = JSON.parse(event.target.result);
-                    if (typeof mapping === 'object' && mapping !== null) {
-                        currentMapping = mapping;
-                        reversedMapping = createReversedMapping(currentMapping);
-                        currentPreset = 'uploaded';
-                        presetBtns.forEach(btn => btn.classList.remove('active'));
-                        updateMappingPreview();
-                        updateModeIndicator();
-                        showToast('映射表加载成功！');
+                    if (typeof mapping === 'object' && mapping !== null && !Array.isArray(mapping)) {
+                        applyMapping(mapping, 'upload');
+                        showToast(`文件映射加载成功: ${file.name}`);
                     } else {
-                        throw new Error('无效的格式');
+                        throw new Error('无效格式');
                     }
                 } catch (error) {
                     showToast('JSON 格式错误，请检查文件');
@@ -740,20 +831,47 @@
                 }
             };
             reader.readAsText(file);
+            mappingFile.value = ''; // 清空以便重新上传同文件触发change
         });
 
         // 自定义映射文本输入
         customMappingText.addEventListener('input', () => {
-            currentMapping = parseCustomMapping(customMappingText.value);
-            reversedMapping = createReversedMapping(currentMapping);
-            updateMappingPreview();
-            updateModeIndicator();
+            if (currentPreset === 'custom') {
+                const newMap = parseCustomMapping(customMappingText.value);
+                applyMapping(newMap, 'custom-textarea', false);
+            } else {
+                // 非custom模式下，如果用户修改文本，可以切换到自定义模式
+                if (customMappingText.value.trim() !== '') {
+                    // 自动激活自定义模式
+                    presetBtns.forEach(btn => btn.classList.remove('active'));
+                    document.querySelector('.preset-btn[data-preset="custom"]').classList.add('active');
+                    currentPreset = 'custom';
+                    customMappingArea.style.display = 'block';
+                    const newMap = parseCustomMapping(customMappingText.value);
+                    applyMapping(newMap, 'custom-textarea', false);
+                }
+            }
         });
 
-        // 转换按钮
-        convertBtn.addEventListener('click', doConvert);
+        // 仓库预设加载按钮
+        loadRepoPresetBtn.addEventListener('click', () => {
+            const fileName = repoFileNameInput.value.trim();
+            if (fileName) {
+                loadRepoPreset(fileName);
+            } else {
+                showToast('请输入文件名', 1500);
+            }
+        });
+        // 支持回车快捷加载
+        repoFileNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                loadRepoPresetBtn.click();
+            }
+        });
 
-        // 复制按钮
+        // 转换、复制、清空
+        convertBtn.addEventListener('click', doConvert);
         copyBtn.addEventListener('click', async () => {
             if (!outputText.value) {
                 showToast('没有可复制的内容');
@@ -763,35 +881,26 @@
                 await navigator.clipboard.writeText(outputText.value);
                 showToast('已复制到剪贴板！');
             } catch (error) {
-                // 降级方案
                 outputText.select();
                 document.execCommand('copy');
                 showToast('已复制到剪贴板！');
             }
         });
-
-        // 清空按钮
         clearBtn.addEventListener('click', () => {
             inputText.value = '';
             outputText.value = '';
             inputText.focus();
         });
-
-        // 输入时实时转换（可选）
         inputText.addEventListener('input', doConvert);
-
-        // 显示提示
-        function showToast(message) {
-            toast.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
-        }
 
         // ==================== 初始化 ====================
         reversedMapping = createReversedMapping(currentMapping);
         updateMappingPreview();
         updateModeIndicator();
         inputText.focus();
+        
+        // 额外说明: 为了让仓库预设功能开箱即用，建议在部署仓库根目录创建 mappings 文件夹，
+        // 并放入示例JSON（如 greek.json, math.json）。本工具加载时会请求相对路径 ./mappings/xxx.json
     </script>
 </body>
 </html>
